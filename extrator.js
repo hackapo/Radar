@@ -23,7 +23,9 @@ admin.initializeApp({
 // ============================================================
 // 💾 PERSISTÊNCIA DE TOKENS EM ARQUIVO JSON
 // ============================================================
-const TOKENS_FILE = path.join(__dirname, '/etc/secrets/tokens.json');
+const TOKENS_FILE = process.env.RENDER
+    ? '/etc/secrets/tokens.json'
+    : path.join(__dirname, 'tokens.json');
 
 function carregarTokens() {
     try {
