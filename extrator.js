@@ -289,7 +289,7 @@ async function conectarSSE() {
                 headers: {
                     "accept": "*/*",
                     "accept-language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "authorization": "Bearer 7iJiOxOgVW9m26XxKwerD4Zo81HgnsAeOZ2gf7Ks",
+                    "authorization": "Bearer GdBigP9Q5paRRloG6oNN4S84drTwoQCHzP4aGUcU",
                     "cache-control": "no-cache",
                     "pragma": "no-cache",
                     "priority": "u=1, i",
@@ -341,11 +341,11 @@ async function conectarSSE() {
                         Object.values(campeonato.eventos).forEach(jogo => {
                             if (jogo.status === 'notstarted') return;
 
-                            const temVermelho = (jogo.cartaoVermelhoTimeCasa > 0 || jogo.cartaoVermelhoTimeFora > 0);
-                            const htAlto      = (jogo.previsaoAcrescimo1Tempo >= 5);
-                            const ftAlto      = (jogo.previsaoAcrescimo2Tempo >= 7);
+                            //const temVermelho = (jogo.cartaoVermelhoTimeCasa > 0 || jogo.cartaoVermelhoTimeFora > 0);
+                            //const htAlto      = (jogo.previsaoAcrescimo1Tempo >= 5);
+                            //const ftAlto      = (jogo.previsaoAcrescimo2Tempo >= 7);
 
-                            if (!temVermelho && !htAlto && !ftAlto) return;
+                            //if (!temVermelho && !htAlto && !ftAlto) return;
 
                             let status = jogo.status === 'inprogress' ? jogo.tempoAtual : jogo.status;
                             if (status === 'Halftime') status = 'Intervalo';
