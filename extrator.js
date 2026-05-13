@@ -289,7 +289,7 @@ async function conectarSSE() {
                 headers: {
                     "accept": "*/*",
                     "accept-language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "authorization": "Bearer hB8XiTEwP7QvvBm8twXfkJi5gDm4vNxnkCLQ3w2o",
+                    "authorization": `Bearer ${process.env.RADAR_TOKEN}`,
                     "cache-control": "no-cache",
                     "pragma": "no-cache",
                     "priority": "u=1, i",
