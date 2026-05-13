@@ -68,7 +68,7 @@
         // ENVIAR TOKEN PARA O SERVIDOR (rota corrigida: /register-token)
         // ============================================================
         function sendTokenToServer(token) {
-            fetch('http://localhost:3000/register-token', { // ✅ CORRIGIDO
+            fetch('https://radar-qvhc.onrender.com/register-token', { // ✅ CORRIGIDO
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token: token }),
@@ -155,7 +155,7 @@
         const lista = document.getElementById('lista-jogos');
         const statusText = document.getElementById('status-text');
         const globalLastUpdate = document.getElementById('global-last-update');
-        const eventSource = new EventSource('http://localhost:3000/events');
+        const eventSource = new EventSource('https://radar-qvhc.onrender.com/events');
 
         eventSource.onopen = () => {
             statusText.innerText = "Conectado. Aguardando dados do servidor...";
