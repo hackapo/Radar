@@ -5,14 +5,20 @@ const path = require('path');
 
 // ============================================================
 // 🔧 CONFIGURAÇÃO DO FIREBASE
+// Lê do arquivo local OU da variável de ambiente (Render/Railway)
 // ============================================================
-const serviceAccount = require('./radar-26442-firebase-adminsdk-fbsvc-9623596b84.json');
+let serviceAccount;
+if (process.env.FIREBASE_CREDENTIALS) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+    console.log("✅ Firebase carregado da variável de ambiente!");
+} else {
+    serviceAccount = require('./radar-26442-firebase-adminsdk-fbsvc-9623596b84.json');
+    console.log("✅ Firebase carregado do arquivo local!");
+}
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
 });
-
-console.log("✅ Firebase Admin SDK inicializado com sucesso!");
 
 // ============================================================
 // 💾 PERSISTÊNCIA DE TOKENS EM ARQUIVO JSON
@@ -42,9 +48,7 @@ function salvarTokens() {
     }
 }
 
-// Carrega tokens salvos ao iniciar
 let userTokens = carregarTokens();
-
 let clientes = [];
 let cacheJogos = new Map();
 let gameStates = new Map();
@@ -74,13 +78,22 @@ async function sendFCMNotification(token, title, body, iconUrl, clickActionUrl, 
         console.log(`📲 Notificação enviada! Token: ${token.substring(0, 20)}... | Resposta: ${response}`);
     } catch (error) {
         console.error(`❌ Erro ao enviar para token: ${token.substring(0, 20)}...`, error.code);
-        if (
-            error.code === 'messaging/invalid-registration-token' ||
-            error.code === 'messaging/registration-token-not-registered'
-        ) {
-            console.log(`🗑️ Removendo token inválido e salvando arquivo.`);
+
+        if (error.code === 'app/invalid-credential') {
+            console.error('🔑 CREDENCIAL DO FIREBASE INVÁLIDA! Atualize a variável FIREBASE_CREDENTIALS no Render.');
+            return;
+        }
+
+        const codigosTokenInvalido = [
+            'messaging/invalid-registration-token',
+            'messaging/registration-token-not-registered',
+            'messaging/invalid-argument',
+        ];
+
+        if (codigosTokenInvalido.includes(error.code)) {
+            console.log(`🗑️ Token inválido removido: ${token.substring(0, 20)}...`);
             userTokens.delete(token);
-            salvarTokens(); // Salva após remover token inválido
+            salvarTokens();
         }
     }
 }
@@ -135,6 +148,15 @@ function processarAtualizacaoJogo(jogoData) {
 // ============================================================
 // SERVIDOR HTTP
 // ============================================================
+const STATIC_FILES = {
+    '/':                         { file: 'index.html',               mime: 'text/html' },
+    '/index.html':               { file: 'index.html',               mime: 'text/html' },
+    '/config.js':                { file: 'config.js',                mime: 'application/javascript' },
+    '/firebase-messaging-sw.js': { file: 'firebase-messaging-sw.js', mime: 'application/javascript' },
+};
+
+const PORT = process.env.PORT || 3000;
+
 const server = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -146,7 +168,21 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // --- SSE: envia jogos em tempo real para o frontend ---
+    // --- Arquivos estáticos ---
+    if (STATIC_FILES[req.url] && req.method === 'GET') {
+        const { file, mime } = STATIC_FILES[req.url];
+        const filePath = path.join(__dirname, file);
+        if (fs.existsSync(filePath)) {
+            res.writeHead(200, { 'Content-Type': mime });
+            fs.createReadStream(filePath).pipe(res);
+        } else {
+            res.writeHead(404);
+            res.end(`Arquivo ${file} não encontrado.`);
+        }
+        return;
+    }
+
+    // --- SSE ---
     if (req.url === '/events' && req.method === 'GET') {
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
@@ -168,7 +204,7 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // --- Registrar token FCM e salvar em arquivo ---
+    // --- Registrar token FCM ---
     if (req.url === '/register-token' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
@@ -178,14 +214,12 @@ const server = http.createServer((req, res) => {
                 if (token) {
                     const isNovo = !userTokens.has(token);
                     userTokens.add(token);
-
                     if (isNovo) {
-                        salvarTokens(); // Salva no arquivo apenas se for token novo
+                        salvarTokens();
                         console.log(`✅ Novo token FCM registrado! Total: ${userTokens.size}`);
                     } else {
                         console.log(`ℹ️ Token já existia. Total: ${userTokens.size}`);
                     }
-
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ message: 'Token registrado com sucesso!' }));
                 } else {
@@ -200,58 +234,46 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // --- 🧪 ROTA DE TESTE: dispara notificação com jogo REAL do cache ---
+    // --- 🧪 Teste com jogo REAL ---
     if (req.url.startsWith('/testar-notificacao') && req.method === 'GET') {
         if (cacheJogos.size === 0) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                message: '⚠️ Nenhum jogo no cache ainda. Aguarde os dados chegarem do RadarFutebol.'
-            }));
+            res.end(JSON.stringify({ message: '⚠️ Nenhum jogo no cache ainda.' }));
             return;
         }
-
         if (userTokens.size === 0) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                message: '⚠️ Nenhum token registrado. Abra o index.html e clique em Ativar Alertas primeiro.'
-            }));
+            res.end(JSON.stringify({ message: '⚠️ Nenhum token registrado.' }));
             return;
         }
 
-        // Pega o primeiro jogo real que está no cache
         const jogoReal = Array.from(cacheJogos.values())[0];
-
-        // Deleta estado anterior para forçar o disparo
         gameStates.delete(jogoReal.idJogo);
-
-        // Roda a função real com o jogo real
         processarAtualizacaoJogo(jogoReal);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-            message: '✅ processarAtualizacaoJogo() rodou com jogo REAL!',
+            message: '✅ Notificação disparada com jogo REAL!',
             tokensRegistrados: userTokens.size,
             jogoUsado: jogoReal
         }));
         return;
     }
 
-    // --- Ver tokens salvos ---
+    // --- Ver tokens ---
     if (req.url === '/tokens' && req.method === 'GET') {
-        const lista = Array.from(userTokens);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-            total: lista.length,
-            tokens: lista.map(t => t.substring(0, 20) + '...')  // Mostra só os primeiros 20 chars por segurança
+            total: userTokens.size,
+            tokens: Array.from(userTokens).map(t => t.substring(0, 20) + '...')
         }));
         return;
     }
 
-    // --- Rota não encontrada ---
     res.writeHead(404);
     res.end('Not found');
 
-}).listen(3000, () => console.log("🚀 Servidor rodando em http://localhost:3000"));
+}).listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
 
 
 // ============================================================
